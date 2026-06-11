@@ -12,6 +12,20 @@
 
 declare(strict_types=1);
 
+use Drupal\Component\Utility\Html;
+use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Core\Entity\Entity\EntityViewDisplay;
+use Drupal\Core\Render\Element;
+use Drupal\Core\Session\AccountProxy;
+use Drupal\Core\Url;
+use Drupal\media\Entity\Media;
+use Drupal\media\MediaInterface;
+use Drupal\media\MediaSourceInterface;
+use Drupal\media\Plugin\media\Source\Image;
+use Drupal\media\Plugin\media\Source\OEmbed;
+use Drupal\media_avportal\Plugin\media\Source\MediaAvPortalPhotoSource;
+use Drupal\media_avportal\Plugin\media\Source\MediaAvPortalSourceInterface;
+use Drupal\media_avportal\Plugin\media\Source\MediaAvPortalVideoSource;
 use Drupal\oe_bootstrap_theme\ConfigImporter;
 use Drupal\oe_whitelabel\ColorSchemePreprocess;
 
@@ -79,4 +93,50 @@ function oe_whitelabel_paragraphs_preprocess_paragraph__oe_quote(array &$variabl
     'background' => 'default',
     'text_colored' => TRUE,
   ]);
+}
+
+/**
+ * Prepares media referenced for field_oe_media into paragraph.
+ *
+ * @param \Drupal\paragraphs\Entity\Paragraph $paragraph
+ *   Paragraph object.
+ * @param \Drupal\media\MediaInterface $media
+ *   Media object.
+ * @param \Drupal\Core\Session\AccountProxy $user
+ *   AccountProxy object.
+ */
+function _oe_whitelabel_get_image_from_media_reference(
+  Paragraph $paragraph,
+  MediaInterface $media,
+  AccountProxy $user
+  ) {
+    /** @var \Drupal\media\Entity\Media $media */
+  if (!$media instanceof MediaInterface) {
+    // The media entity is not available anymore, bail out.
+    return [];
+  }
+
+  // Retrieve the correct media translation.
+  /** @var \Drupal\media\Entity\Media $media */
+  $media = \Drupal::service('entity.repository')->getTranslationFromContext($media, $paragraph->language()->getId());
+
+  // Run access checks on the media entity.
+  $access = $media->access('view', $user, TRUE);
+  if (!$access->isAllowed()) {
+    return [];
+  }
+
+  // Get the media source.
+  $source = $media->getSource();
+
+  $is_image = $source instanceof MediaAvPortalPhotoSource || $source instanceof Image;
+
+  // If it's not an image and not a video, bail out.
+  if (!$is_image) {
+    return [];
+  }
+
+  $thumbnail = $media->get('thumbnail')->first();
+  $image = ImageValueObject::fromImageItem($thumbnail);
+  return $image;
 }
